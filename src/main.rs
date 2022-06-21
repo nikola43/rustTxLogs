@@ -1,31 +1,34 @@
 use indicatif::ProgressBar;
 use serde::{Deserialize, Serialize};
-use std::collections::hash_map::DefaultHasher;
 use std::fmt;
 use std::fs::OpenOptions;
-use std::hash::Hash;
 use std::io::prelude::*;
 use std::str;
 use std::str::FromStr;
 use std::{thread, time::Duration};
 use web3::helpers as w3h;
-use web3::types::{BlockId, BlockNumber, TransactionId, H160};
+
+use web3::types::{BlockId, BlockNumber, Transaction, TransactionId, H160};
 #[derive(Serialize, Deserialize, Debug)]
 struct TX {
     block: String,
     tx_hash: String,
     from: String,
     to: String,
-    value: String,
 }
 
-/*
 impl std::fmt::Display for TX {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self)
+        write!(
+            f,
+            "block': {}'
+            tx_hash: '{}'
+            from: '{}'
+            to: '{}'",
+            self.block, self.tx_hash, self.from, self.from
+        )
     }
 }
-*/
 
 struct HexSlice<'a>(&'a [u8]);
 
@@ -76,10 +79,12 @@ async fn main() -> web3::Result<()> {
     let contract_address = "0x40064CE057Fb99a5c8e34F61365cC5996E59aB57"; // PXT V1
     let pb = ProgressBar::new(block_to_check);
 
+    let create_node_method_id = "6748B4D6";
+
     let mut file = OpenOptions::new()
         .write(true)
         .append(true)
-        .open("my-file.txt")
+        .open("my-file.json")
         .unwrap();
 
     //let mut txs: Vec<TX> = vec![];
@@ -113,30 +118,29 @@ async fn main() -> web3::Result<()> {
             let to_addr = tx.to.unwrap_or(H160::zero());
             let contract_address_h160: H160 = H160::from_str(contract_address).unwrap();
 
-            //println!("From: {:?}", from_addr);
-            //println!("To: {:?}", to_addr);
-            //println!("");
-
             if to_addr == contract_address_h160 {
-                let a = tx.input.0.hex_display();
+                let method_id = get_tx_method_id(tx);
+                println!("method_id: {}", method_id);
 
-                println!("{}", a.to_string());
+                if method_id == create_node_method_id {
+                    println!("CREATE NODE");
 
-                //println!("tx: {:?}", str::from_utf8(&a).unwrap());
+                    let ctx = TX {
+                        block: current_block_index.to_string(),
+                        tx_hash: w3h::to_string(&transaction_hash),
+                        from: w3h::to_string(&from_addr),
+                        to: w3h::to_string(&to_addr),
+                    };
 
-                println!("FOUND -----------");
-                println!("Tx: {:?}", w3h::to_string(&transaction_hash));
-                println!("From: {:?}", from_addr);
+                    let serialized_ctx = serde_json::to_string(&ctx).unwrap();
 
-                let ctx = TX {
-                    block: current_block_index.to_string(),
-                    tx_hash: w3h::to_string(&transaction_hash),
-                    from: w3h::to_string(&from_addr),
-                    to: w3h::to_string(&to_addr),
-                    value: tx.value.to_string(),
-                };
+                    if let Err(e) = writeln!(file, "{}", serialized_ctx) {
+                        eprintln!("Couldn't write to file: {}", e);
+                    }
 
-                let serialized_ctx = serde_json::to_string(&ctx).unwrap();
+                    println!("{}", ctx);
+                }
+
                 //println!("{:?}", ctx);
                 //println!("{}", serialized_ctx);
                 //txs.push(ctx);
@@ -149,10 +153,6 @@ async fn main() -> web3::Result<()> {
                 )
                 .unwrap();
                 */
-
-                if let Err(e) = writeln!(file, "{}", serialized_ctx) {
-                    eprintln!("Couldn't write to file: {}", e);
-                }
             }
         }
         //pb.inc(1);
@@ -161,4 +161,22 @@ async fn main() -> web3::Result<()> {
     }
     pb.finish_with_message("done");
     Ok(())
+}
+
+fn get_tx_method_id(tx: Transaction) -> String {
+    let mut a_string = String::from("");
+    let tx_data_input = tx.input.0.hex_display().to_string().replace(" ", "");
+
+    a_string.push(tx_data_input.chars().nth(0).unwrap());
+    a_string.push(tx_data_input.chars().nth(1).unwrap());
+    a_string.push(tx_data_input.chars().nth(2).unwrap());
+    a_string.push(tx_data_input.chars().nth(3).unwrap());
+    a_string.push(tx_data_input.chars().nth(4).unwrap());
+    a_string.push(tx_data_input.chars().nth(5).unwrap());
+    a_string.push(tx_data_input.chars().nth(6).unwrap());
+    a_string.push(tx_data_input.chars().nth(7).unwrap());
+
+    println!("{}", a_string);
+
+    a_string
 }
